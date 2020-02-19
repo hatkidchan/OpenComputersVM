@@ -17,10 +17,11 @@ public class Filesystem extends FilesystemBase {
 	private int spaceTotal;
 	private boolean temporary;
 	private HashMap<Integer, Handle> handles = new HashMap<>();
-	
+	public long throttlingDuration = 10;
+
 	public Filesystem(Machine machine, String address, String label, String realPath, boolean temporary, int spaceTotal) {
 		super(machine, address, "filesystem", label, realPath);
-		
+
 		this.spaceTotal = spaceTotal;
 		this.temporary = temporary;
 	}
@@ -34,11 +35,12 @@ public class Filesystem extends FilesystemBase {
 			int id = args.checkInteger(1);
 			if (handles.containsKey(id)) {
 				machine.player.playHDDSound();
+				throttleAccess();
 
 				try {
 					RandomAccessFile randomAccessFile = handles.get(id).randomAccessFile;
 					long value = args.checkInteger(3);
-					
+
 					switch (args.checkString(2)) {
 						case "cur":
 							randomAccessFile.seek(randomAccessFile.getFilePointer() + value);
@@ -63,12 +65,13 @@ public class Filesystem extends FilesystemBase {
 			}
 		});
 		machine.lua.setField(-2, "seek");
-		
+
 		// Чтение из хендла
 		machine.lua.pushJavaFunction(args -> {
 			int id = args.checkInteger(1);
 			if (handles.containsKey(id)) {
 				machine.player.playHDDSound();
+				throttleAccess();
 
 				byte[] result = handles.get(id).read(args.checkNumber(2));
 				if (result.length > 0) {
@@ -85,17 +88,18 @@ public class Filesystem extends FilesystemBase {
 			}
 		});
 		machine.lua.setField(-2, "read");
-		
+
 		// Запись в хендл
 		machine.lua.pushJavaFunction(args -> {
 			int id = args.checkInteger(1);
 			if (handles.containsKey(id)) {
 				machine.player.playHDDSound();
-				
+				throttleAccess();
+
 				byte[] bytes = args.checkByteArray(2);
 				handles.get(id).write(bytes);
 				machine.lua.pushInteger(bytes.length);
-				
+
 				return 1;
 			}
 			else {
@@ -115,15 +119,15 @@ public class Filesystem extends FilesystemBase {
 			return 0;
 		});
 		machine.lua.setField(-2, "close");
-		
+
 		// Открытие хендля для чтения/записи
 		machine.lua.pushJavaFunction(args -> {
 			File file = getFsFile(args);
 
 			boolean
-				writing = false,
-				binary = false,
-				append = false;
+					writing = false,
+					binary = false,
+					append = false;
 
 			if (!args.isNoneOrNil(2)){
 				String mode = machine.lua.checkString(2);
@@ -131,15 +135,15 @@ public class Filesystem extends FilesystemBase {
 				binary = mode.contains("b");
 				append = mode.contains("a");
 			}
-			
+
 			if (file.getParentFile().exists()) {
 				if (writing || append || file.exists()) {
 					machine.lua.pushInteger(
-						writing || append ?
-						new WriteHandle(file, binary, append).id :
-						new ReadHandle(file, binary).id
+							writing || append ?
+									new WriteHandle(file, binary, append).id :
+									new ReadHandle(file, binary).id
 					);
-					
+
 					return 1;
 				}
 				else {
@@ -155,11 +159,12 @@ public class Filesystem extends FilesystemBase {
 		// Таймштамп изменения файла
 		machine.lua.pushJavaFunction(args -> {
 			machine.player.playHDDSound();
-			
+			throttleAccess();
+
 			File file = getFsFile(args);
 			if (file.exists()) {
 				machine.lua.pushInteger((int) (file.lastModified() / 1000));
-				
+
 				return 1;
 			}
 			else {
@@ -171,6 +176,7 @@ public class Filesystem extends FilesystemBase {
 		// Размер файла
 		machine.lua.pushJavaFunction(args -> {
 			machine.player.playHDDSound();
+			throttleAccess();
 
 			File file = getFsFile(args);
 			if (file.exists()) {
@@ -187,21 +193,23 @@ public class Filesystem extends FilesystemBase {
 		// Создание директорий
 		machine.lua.pushJavaFunction(args -> {
 			machine.player.playHDDSound();
+			throttleAccess();
 
 			machine.lua.pushBoolean(getFsFile(args).mkdirs());
 			return 1;
 		});
 		machine.lua.setField(-2, "makeDirectory");
-		
+
 		// Удоление файла
 		machine.lua.pushJavaFunction(args -> {
 			machine.player.playHDDSound();
+			throttleAccess();
 
 			File file = getFsFile(args);
 			if (file.exists()) {
 				IO.deleteFolderContents(file);
 				machine.lua.pushBoolean(file.delete());
-				
+
 				return 1;
 			}
 			else {
@@ -213,26 +221,29 @@ public class Filesystem extends FilesystemBase {
 		// Директория ли
 		machine.lua.pushJavaFunction(args -> {
 			machine.player.playHDDSound();
-			
+			throttleAccess();
+
 			machine.lua.pushBoolean(getFsFile(args).isDirectory());
 
 			return 1;
 		});
 		machine.lua.setField(-2, "isDirectory");
-		
+
 		// Существование файла
 		machine.lua.pushJavaFunction(args -> {
 			machine.player.playHDDSound();
+			throttleAccess();
 
 			machine.lua.pushBoolean(getFsFile(args).exists());
-			
+
 			return 1;
 		});
 		machine.lua.setField(-2, "exists");
-	
+
 		// Список файлов в директории
 		machine.lua.pushJavaFunction(args -> {
 			machine.player.playHDDSound();
+			throttleAccess();
 
 			File file = getFsFile(args);
 			if (file.exists()) {
@@ -241,18 +252,18 @@ public class Filesystem extends FilesystemBase {
 
 					machine.lua.newTable();
 					int tableIndex = machine.lua.getTop();
-					
+
 					for (int i = 0; i < list.length; i++) {
 						machine.lua.pushInteger(i + 1);
-						
+
 						if (list[i].isDirectory())
 							machine.lua.pushString(list[i].getName() + "/");
 						else
 							machine.lua.pushString(list[i].getName());
-						
+
 						machine.lua.setTable(tableIndex);
 					}
-					
+
 					return 1;
 				}
 				else {
@@ -267,6 +278,7 @@ public class Filesystem extends FilesystemBase {
 
 		machine.lua.pushJavaFunction(args -> {
 			machine.player.playHDDSound();
+			throttleAccess();
 
 			File file = getFsFile(args);
 			if (file.exists()) {
@@ -287,21 +299,21 @@ public class Filesystem extends FilesystemBase {
 	@Override
 	public JSONObject toJSONObject() {
 		return super.toJSONObject()
-			.put("temporary", temporary);
+				.put("temporary", temporary);
 	}
 
 	private abstract class Handle {
 		public int id;
 		public RandomAccessFile randomAccessFile;
-		
+
 		public Handle(File file) {
 			try {
 				randomAccessFile = new RandomAccessFile(file, "rw");
-			   
+
 				do {
 					id = ThreadLocalRandom.current().nextInt();
 				} while(handles.containsKey(id));
-				
+
 				handles.put(id, this);
 			}
 			catch (FileNotFoundException e) {
@@ -311,7 +323,7 @@ public class Filesystem extends FilesystemBase {
 
 		public abstract void write(byte[] data);
 		public abstract byte[] read(double count);
-		
+
 		public void close() {
 			try {
 //				System.out.println("Closing handle " + pizda.getPath());
@@ -326,8 +338,8 @@ public class Filesystem extends FilesystemBase {
 	private class ReadHandle extends Handle {
 		public ReadHandle(File file, boolean binary) {
 			super(file);
-			
-            System.out.println("Reading file: " + file.getPath());
+
+			System.out.println("Reading file: " + file.getPath());
 		}
 
 		public byte[] read(double needToRead) {
@@ -339,26 +351,26 @@ public class Filesystem extends FilesystemBase {
 					for (int i = 0; i < readCount; i++) {
 						pizda[i] = buffer[i];
 					}
-					
+
 					return pizda;
 				}
 			}
 			catch (IOException e) {
 				e.printStackTrace();
 			}
-			
+
 			return new byte[] {};
 		}
 
 		public void write(byte[] bytes) {}
 	}
-	
+
 	private class WriteHandle extends Handle {
 		public WriteHandle(File file, boolean binary, boolean append) {
 			super(file);
 
 			System.out.println("Writing file: " + file.getPath());
-			
+
 			try {
 				if (append)
 					randomAccessFile.seek(randomAccessFile.length());
@@ -390,7 +402,7 @@ public class Filesystem extends FilesystemBase {
 
 		return 2;
 	}
-	
+
 	private int pushFileNotExists() {
 		return pushNilAndReason("file not exists");
 	}
@@ -405,5 +417,15 @@ public class Filesystem extends FilesystemBase {
 
 	private File getFsFile(LuaState args) {
 		return getFsFile(args.checkString(1));
+	}
+
+	public void throttleAccess() {
+		if(throttlingDuration > 0) {
+			try {
+				Thread.sleep(throttlingDuration);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 }
