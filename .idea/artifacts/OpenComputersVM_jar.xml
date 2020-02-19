@@ -1,5 +1,5 @@
 <component name="ArtifactManager">
-  <artifact type="jar" name="OpenComputersVM:jar">
+  <artifact type="jar" build-on-make="true" name="OpenComputersVM:jar">
     <output-path>$PROJECT_DIR$/out/</output-path>
     <root id="archive" name="OpenComputersVM.jar">
       <element id="module-output" name="OpenComputersVM" />
@@ -7,6 +7,7 @@
       <element id="extracted-dir" path="$PROJECT_DIR$/src/vm/libraries/json-20180813.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$PROJECT_DIR$/src/vm/libraries/OpenComputers-JNLua.jar" path-in-jar="/" />
       <element id="extracted-dir" path="$PROJECT_DIR$/src/vm/libraries/commons-lang3-3.8.1.jar" path-in-jar="/" />
+      <element id="library" level="project" name="libraries" />
     </root>
   </artifact>
 </component>
