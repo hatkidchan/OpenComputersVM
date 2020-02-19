@@ -1,35 +1,29 @@
 package vm.computer.components;
 
 import vm.computer.Machine;
-
-import javax.sound.midi.MidiChannel;
-import javax.sound.midi.MidiSystem;
-import javax.sound.midi.MidiUnavailableException;
-import javax.sound.midi.Synthesizer;
+import vm.computer.SquareSynthesizer;
 
 public class Computer extends ComponentBase {
-	private MidiChannel midiChannel;
-	
+	private SquareSynthesizer synthesizer = new SquareSynthesizer();
+	private boolean soundAvailable = false;
+
 	public Computer(Machine machine, String address) {
 		super(machine, address, "computer");
-		
-		this.machine = machine;
 
-		try {
-			Synthesizer synthesizer = MidiSystem.getSynthesizer();
-			synthesizer.open();
-			midiChannel = synthesizer.getChannels()[0];
-			midiChannel.programChange(19);
+		if(synthesizer.checkDataLine()) {
+			soundAvailable = true;
+			System.out.println("ХХОБА!");
+		} else {
+			System.err.println("Блядь!");
 		}
-		catch (MidiUnavailableException e) {
-			e.printStackTrace();
-		}
+
+		this.machine = machine;
 	}
 
 	@Override
 	public void pushProxyFields() {
 		super.pushProxyFields();
-		
+
 		machine.lua.pushJavaFunction(args -> {
 			rawBeep(args.checkInteger(1), (long) (args.checkNumber(2) * 1000));
 
@@ -60,17 +54,20 @@ public class Computer extends ComponentBase {
 	}
 
 	public void rawBeep(int frequency, long duration) {
-		midiChannel.noteOn((int) (frequency / 2000d * 127), 127);
-		
+		if(soundAvailable)
+			synthesizer.tone(frequency, (int) duration);
+		else
+			System.err.println("Блядь, беды с SDL");
+
 		try {
 			Thread.sleep(duration);
 		}
 		catch (InterruptedException e) {}
 		finally {
-			midiChannel.allNotesOff();
-
 			try {
-				Thread.sleep(100);
+				Thread.sleep(50);
+				if(soundAvailable)
+					synthesizer.sdl.stop();
 			}
 			catch (InterruptedException e) {}
 		}
